@@ -1,0 +1,3 @@
+```sh
+poetry shell
+```
