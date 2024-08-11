@@ -4,7 +4,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_teddynote.prompts import load_prompt
-from langchain import hub
+import glob
 
 
 # API KEY를 환경변수로 관리하기 위한 설정 파일
@@ -25,9 +25,10 @@ if "messages" not in st.session_state:
 with st.sidebar:
     clear_btn = st.button("대화 초기화")
 
-    selected_prompt = st.selectbox(
-        "프롬프트를 선택해 주세요", ("기본", "SNS 게시글", "요약"), index=0
-    )
+    prompt_files = glob.glob("prompts/*.yaml")
+
+    selected_prompt = st.selectbox("프롬프트를 선택해 주세요", prompt_files, index=0)
+    task_input = st.text_input("TASK 입력", "")
 
 
 # 이전대화를 출력
@@ -42,24 +43,12 @@ def add_message(role, message):
 
 
 # 체인 생성
-def create_chain(prompt_type):
-    # prompt | llm | output_parser
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                "당신은 친절한 AI 어시스턴트입니다. 다음의 질문에 간결하게 답변해 주세요",
-            ),
-            ("user", "#Question:\n{question}"),
-        ]
-    )
+def create_chain(prompt_filepath, task=""):
+    # prompt 적용
+    prompt = load_prompt(prompt_filepath, encoding="utf-8")
 
-    if prompt_type == "SNS 게시글":
-        # encoding 은 Windows 사용자는 cp949
-        prompt = load_prompt("prompts/sns.yaml", encoding="utf-8")
-
-    elif prompt_type == "요약":
-        prompt = hub.pull("teddynote/chain-of-density-korean")
+    if task:
+        prompt = prompt.partial(task=task)
 
     llm = ChatOpenAI(model_name="gpt-4o", temperature=0)
     output_parser = StrOutputParser()
@@ -76,12 +65,15 @@ print_messages()
 # 사용자의 입력을 받는다.
 user_input = st.chat_input("궁금한 내용 입력 하세요")
 
+
 if user_input:
     # 사용자 입력
     st.chat_message("user").write(user_input)
     # Chain 생성
-    chain = create_chain(selected_prompt)
+    chain = create_chain(selected_prompt, task=task_input)
     response = chain.stream({"question": user_input})
+
+    # 스트리밍 호출
     with st.chat_message("assistant"):
         # 빈 공간을 만들어서, 여기에 토큰을 스트리밍 출력
         container = st.empty()
